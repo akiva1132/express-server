@@ -2,8 +2,12 @@ import UserInterface from "../interfaces/UserInterface";
 import { v1 as uuid1 } from "uuid";
 import { comparePassword, generateUserPassword } from "../helpers/bcrypt";
 import {
+  updateUser,
+  addUser,
+  getByIdFromJsonFile,
   getCollectionFromJsonFile,
-  modifyCollection,
+  deletUser
+  // modifyCollection,
 } from "../../dataAccess/jsonfileDAL";
 import chalk from "chalk";
 import userValidation from "../models/joi/userValidation";
@@ -14,7 +18,7 @@ type UserResult = Promise<UserInterface | null>;
 
 export const getUsers = async () => {
   try {
-    const users = await getCollectionFromJsonFile("users");
+    const users = await getCollectionFromJsonFile();
     if (!users) throw new Error("no users in the database");
     return users;
   } catch (error) {
@@ -25,14 +29,10 @@ export const getUsers = async () => {
 
 export const getUser = async (userId: string) => {
   try {
-    const users = await getCollectionFromJsonFile("users");
+    const users = await getByIdFromJsonFile(userId);
     if (users instanceof Error)
       throw new Error("Oops... Could not get the users from the Database");
-
-    const userFromDB = users.find(
-      (user: Record<string, unknown>) => user._id === userId
-    );
-
+    const userFromDB = users
     if (!userFromDB) throw new Error("No user with this id in the database!");
     return userFromDB;
   } catch (error) {
@@ -41,22 +41,15 @@ export const getUser = async (userId: string) => {
   }
 };
 
-export const register = async (user: UserInterface): UserResult => {
+export const register = async (user: UserInterface) => {
   try {
-    const users = await getCollectionFromJsonFile("users");
+    const users = await getCollectionFromJsonFile();
     if (users instanceof Error)
       throw new Error("Oops... Could not get the users from the Database");
-
-    const userRegistered = users.find(
-      (userInDB: Record<string, unknown>) => userInDB.email === user.email
-    );
+    const userRegistered = users.find((us) => us.email === user.email)
     if (userRegistered) throw new Error("This user is allready registered!");
-
-    user._id = uuid1();
     user.password = generateUserPassword(user.password);
-    users.push({ ...user });
-    await modifyCollection("users", users);
-    return user;
+    return await addUser(user)
   } catch (error) {
     console.log(chalk.redBright(error));
     return Promise.reject(error);
@@ -66,23 +59,15 @@ export const register = async (user: UserInterface): UserResult => {
 export const editUser = async (
   userId: string,
   userForUpdate: UserInterface
-): UserResult => {
+) => {
   try {
-    const users = await getCollectionFromJsonFile("users");
+    const users = await getCollectionFromJsonFile();
     if (users instanceof Error)
       throw new Error("Oops... Could not get the users from the Database");
-
-    const index = users.findIndex((user) => user._id === userId);
-    if (index === -1) throw new Error("Could not find user with this ID!");
-
-    const usersCopy = [...users];
-    const userToUpdate = { ...usersCopy[index], ...userForUpdate };
-    usersCopy[index] = userToUpdate;
-
-    const data = await modifyCollection("users", usersCopy);
+    const data = await updateUser(userForUpdate, userId);
     if (!data)
       throw new Error("Oops... something went wrong Could not Edit this user");
-    return userToUpdate;
+    return data;
   } catch (error) {
     console.log(chalk.redBright(error));
     return Promise.reject(error);
@@ -91,19 +76,7 @@ export const editUser = async (
 
 export const deleteUser = async (userId: string) => {
   try {
-    const users = await getCollectionFromJsonFile("users");
-    if (users instanceof Error)
-      throw new Error("Oops... Could not get the users from the Database");
-
-    const user = users.find((user) => user._id === userId);
-    if (!user) throw new Error("Could not find user with this ID!");
-    const filteredUser = users.filter((user) => user._id !== userId);
-
-    const data = await modifyCollection("users", filteredUser);
-    if (!data)
-      throw new Error("Oops... something went wrong Could not Edit this user");
-
-    return user;
+    return await deletUser(userId)
   } catch (error) {
     console.log(chalk.redBright(error));
     return Promise.reject(error);
@@ -113,20 +86,13 @@ export const deleteUser = async (userId: string) => {
 export const login = async (userFromClient: UserInterface) => {
   try {
     const users = (await getCollectionFromJsonFile(
-      "users"
-    )) as unknown as UserInterface[];
-    if (!users)
+    ))
+    if (!users.length)
       throw new Error("Oops... Could not get the users from the Database");
-
     const userInDB = users.find((user) => userFromClient.email === user.email);
-
     if (!userInDB) throw new Error("The email or password is incorrect!");
-
-    const userCopy = { ...userInDB };
-
-    if (!comparePassword(userFromClient.password, userCopy.password))
+    if (!comparePassword(userFromClient.password, (userInDB as unknown as UserInterface).password))
       throw new Error("The email or password is incorrect!");
-
     return "You are logged in!";
   } catch (error) {
     console.log(chalk.redBright(error));

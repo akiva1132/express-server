@@ -16,7 +16,7 @@ npm i
 
 ### Run the typescript compiler
 
-Run the Typescript compiler using the following command in the cmd
+Run the Typescript compiler using th~e following command in the cmd
 
 ```
 tsc -w
